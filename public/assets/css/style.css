@@ -531,6 +531,57 @@ body {
 .td-grade { font-weight: 800; text-align: center; border-radius: 4px; }
 .td-remark { font-style: italic; color: var(--gray-600); }
 
+.tfoot-total td,
+.tfoot-average td {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #b6d4b6;
+  font-size: 0.82rem;
+}
+
+.tfoot-total {
+  background: #006400;
+  color: #ffffff;
+}
+.tfoot-total .td-total-label {
+  text-align: right;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 0.8rem;
+  color: #ffffff;
+  border-color: #004d00;
+}
+.tfoot-total .td-total {
+  background: #FFD700;
+  color: #006400;
+  font-size: 1rem;
+  border-color: #004d00;
+}
+
+.tfoot-average {
+  background: #f0f7f0;
+  color: #1e293b;
+}
+.tfoot-average .td-total-label {
+  text-align: right;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 0.8rem;
+  color: #006400;
+  border-color: #b6d4b6;
+}
+.tfoot-average .td-total {
+  font-size: 0.95rem;
+  color: #006400;
+  border-color: #b6d4b6;
+}
+.tfoot-average .td-remark {
+  font-style: italic;
+  color: #166534;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-color: #b6d4b6;
+}
+
 .grade-excellent  { background: #dcfce7 !important; color: #166534 !important; }
 .grade-very-good  { background: #d1fae5 !important; color: #065f46 !important; }
 .grade-credit     { background: #dbeafe !important; color: #1e40af !important; }
@@ -665,6 +716,68 @@ body {
   line-height: 1.3;
 }
 
+/* ═══ AFFECTIVE TRAITS & PSYCHOMOTOR ════════════════════════════════ */
+
+.traits-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0;
+  border-top: 2px solid var(--green-dark);
+  border-bottom: 1px solid var(--green-dark);
+}
+
+.traits-box,
+.traits-key {
+  padding: 0.65rem 1rem;
+  border-right: 1px solid #b6d4b6;
+}
+
+.traits-key { border-right: none; min-width: 120px; }
+
+.traits-title {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--green-dark);
+  background: #e8f5e8;
+  padding: 0.3rem 0.5rem;
+  margin: -0.65rem -1rem 0.5rem;
+  border-bottom: 1px solid #b6d4b6;
+  text-align: center;
+}
+
+.traits-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+.traits-table thead tr {
+  background: var(--green-dark);
+  color: white;
+}
+
+.traits-table th {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.65rem;
+  text-align: left;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+.traits-table tbody tr:nth-child(even) { background: #f5fcf5; }
+
+.traits-table td {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #d1e8d1;
+  vertical-align: middle;
+}
+
+.trait-name    { font-weight: 500; color: #1e293b; }
+.trait-rating  { text-align: center; font-weight: 700; color: var(--green-dark); width: 32px; }
+.trait-remark  { font-style: italic; color: #475569; font-size: 0.68rem; }
+
+/* ═══ Slip Footer ══════════════════════════════════════════════════ */
 /* Slip Footer */
 .slip-footer {
   padding: 0.65rem 1.5rem;

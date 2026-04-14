@@ -49,6 +49,10 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
       PIN Manager
     </a>
+    <a class="nav-item" data-section="tabulation" onclick="showSection('tabulation')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 8h18M3 13h18M8 3v18" stroke="currentColor" stroke-width="2"/></svg>
+      Tabulation
+    </a>
     <a class="nav-item" data-section="analysis" onclick="showSection('analysis')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Analysis
@@ -350,6 +354,43 @@
     </div>
   </section>
 
+  <!-- ═══════ TABULATION ═══════ -->
+  <section class="content-section" id="section-tabulation">
+    <div class="page-header">
+      <h2>Tabulation Sheet</h2>
+      <div id="tab-action-btns" style="display:none;gap:0.5rem;flex-direction:row">
+        <button class="btn-secondary" onclick="exportTabulationCsv()" id="tab-export-btn" style="display:none">⬇ Export CSV</button>
+        <button class="btn-secondary" onclick="printTabulation()" id="tab-print-btn" style="display:none">🖨️ Print</button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <select id="tab-class" class="filter-select">
+        <option value="">-- Select Class --</option>
+      </select>
+      <select id="tab-session" class="filter-select">
+        <option value="">-- Session --</option>
+      </select>
+      <select id="tab-term" class="filter-select">
+        <option value="">-- Term --</option>
+        <option value="First Term">First Term</option>
+        <option value="Second Term">Second Term</option>
+        <option value="Third Term">Third Term</option>
+      </select>
+      <button class="btn-primary" onclick="loadTabulation()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 8h18M8 3v18" stroke="currentColor" stroke-width="2"/></svg>
+        Generate
+      </button>
+    </div>
+
+    <div id="tabulation-panel">
+      <div class="empty-placeholder">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="#94a3b8" stroke-width="1.5"/><path d="M3 8h18M3 13h18M8 3v18" stroke="#94a3b8" stroke-width="1.5"/></svg>
+        <p>Select a class, session, and term to generate the tabulation sheet</p>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══════ ANALYSIS ═══════ -->
   <section class="content-section" id="section-analysis">
     <div class="page-header">
@@ -521,7 +562,9 @@
       </div>
       <div class="form-field-admin">
         <label>Class *</label>
-        <input type="text" name="class" class="admin-input" placeholder="e.g. SS2A" required>
+        <select name="class" id="add-student-class" class="admin-input" required>
+          <option value="">-- Select Class --</option>
+        </select>
       </div>
       <div class="form-row">
         <div class="form-field-admin">
@@ -598,6 +641,46 @@
     <div class="modal-footer">
       <button type="button" class="btn-secondary" onclick="closeModal('modal-add-result')">Cancel</button>
       <button type="button" class="btn-primary" onclick="submitAddResult()">Save Result</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Student Modal -->
+<div class="modal-overlay" id="modal-edit-student">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Edit Student</h3>
+      <button class="modal-close" onclick="closeModal('modal-edit-student')">✕</button>
+    </div>
+    <input type="hidden" id="edit-student-id">
+    <div class="form-field-admin">
+      <label>Full Name *</label>
+      <input type="text" id="edit-student-name" class="admin-input" placeholder="Full name">
+    </div>
+    <div class="form-field-admin">
+      <label>Class *</label>
+      <select id="edit-student-class" class="admin-input">
+        <option value="">-- Select Class --</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-field-admin">
+        <label>Gender</label>
+        <select id="edit-student-gender" class="admin-input">
+          <option value="">-- Select --</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+      </div>
+      <div class="form-field-admin">
+        <label>Date of Birth</label>
+        <input type="date" id="edit-student-dob" class="admin-input">
+      </div>
+    </div>
+    <div id="edit-student-msg" style="display:none;padding:0.6rem;border-radius:6px;font-size:0.85rem"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary" onclick="closeModal('modal-edit-student')">Cancel</button>
+      <button type="button" class="btn-primary" onclick="submitEditStudent()">Save Changes</button>
     </div>
   </div>
 </div>

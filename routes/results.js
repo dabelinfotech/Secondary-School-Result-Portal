@@ -69,6 +69,18 @@ router.post('/check', (req, res) => {
     settings[s.key] = s.value;
   });
 
+  // Get affective & psychomotor ratings
+  const ratingRows = db.prepare(
+    'SELECT type, trait, rating FROM student_ratings WHERE student_id = ? AND session = ? AND term = ?'
+  ).all(pinRecord.student_id, pinRecord.session, pinRecord.term);
+
+  const affective   = {};
+  const psychomotor = {};
+  ratingRows.forEach(r => {
+    if (r.type === 'affective')   affective[r.trait]   = r.rating;
+    if (r.type === 'psychomotor') psychomotor[r.trait] = r.rating;
+  });
+
   // Mark PIN as used (first time only)
   if (!pinRecord.is_used) {
     db.prepare('UPDATE pins SET is_used = 1, used_at = CURRENT_TIMESTAMP WHERE id = ?').run(pinRecord.id);
@@ -76,6 +88,7 @@ router.post('/check', (req, res) => {
 
   res.json({
     success: true,
+    ratings: { affective, psychomotor },
     student: {
       name: pinRecord.name,
       admission_number: pinRecord.admission_number,

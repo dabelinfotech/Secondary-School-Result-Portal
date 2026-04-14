@@ -6,6 +6,7 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
+  await loadClassArms();
   await loadStats();
   await loadSettings();
   setupScorePreview();
@@ -33,14 +34,15 @@ async function checkAuth() {
 // ─── Navigation ────────────────────────────────────────────────────────────────
 
 const sectionTitles = {
-  overview:  'Overview',
-  students:  'Student Management',
-  results:   'Individual Results',
-  upload:    'Bulk Upload',
-  pins:      'PIN Manager',
-  analysis:  'Performance Analysis',
-  classview: 'Class Result Viewer',
-  settings:  'Settings'
+  overview:    'Overview',
+  students:    'Student Management',
+  results:     'Individual Results',
+  upload:      'Bulk Upload',
+  pins:        'PIN Manager',
+  tabulation:  'Tabulation Sheet',
+  analysis:    'Performance Analysis',
+  classview:   'Class Result Viewer',
+  settings:    'Settings'
 };
 
 function showSection(name) {
@@ -58,6 +60,7 @@ function showSection(name) {
   // Lazy load section data
   if (name === 'students') loadStudents();
   if (name === 'pins')     { loadPins(); populatePinClassDropdown(); }
+  if (name === 'tabulation') populateTabulationDropdowns();
   if (name === 'analysis') populateAnalysisDropdowns();
   if (name === 'classview') populateClassViewDropdowns();
   if (name === 'settings') loadSettingsForm();
@@ -122,19 +125,7 @@ async function loadStats() {
       });
     }
 
-    // Populate class dropdowns
-    if (s.classes.length > 0) {
-      const classEls = document.querySelectorAll('#student-class-filter, #view-pin-class, #cv-class, #gen-class, #an-class');
-      classEls.forEach(el => {
-        const def = el.querySelector('option') ? el.options[0].textContent : '-- All Classes --';
-        el.innerHTML = `<option value="">${def}</option>`;
-        s.classes.forEach(c => {
-          const opt = document.createElement('option');
-          opt.value = opt.textContent = c;
-          el.appendChild(opt);
-        });
-      });
-    }
+    // Class dropdowns are pre-populated from the CLASS_ARMS list by loadClassArms()
 
   } catch (e) { console.error('Stats error:', e); }
 }
@@ -143,6 +134,57 @@ async function loadStats() {
 
 let cachedStats    = null;
 let cachedSettings = {};
+let cachedClasses  = [];
+
+// ─── Class Arms ────────────────────────────────────────────────────────────────
+
+async function loadClassArms() {
+  try {
+    const res  = await fetch('/api/admin/classes');
+    const data = await res.json();
+    if (!data.success) return;
+    cachedClasses = data.classes;
+    populateAllClassDropdowns();
+  } catch (_) {}
+}
+
+function populateAllClassDropdowns() {
+  const selectors = [
+    '#add-student-class',
+    '#edit-student-class',
+    '#student-class-filter',
+    '#view-pin-class',
+    '#cv-class',
+    '#gen-class',
+    '#tab-class',
+    '#an-class',
+  ];
+
+  selectors.forEach(sel => {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    const isFilter = sel.includes('filter') || sel === '#view-pin-class' || sel === '#cv-class' || sel === '#an-class';
+    const defaultLabel = isFilter ? '-- All Classes --' : '-- Select Class --';
+    el.innerHTML = `<option value="">${defaultLabel}</option>`;
+
+    // Group by level
+    const jss = cachedClasses.filter(c => c.startsWith('JSS'));
+    const sss = cachedClasses.filter(c => c.startsWith('SSS'));
+
+    if (jss.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Junior Secondary School';
+      jss.forEach(c => { const o = document.createElement('option'); o.value = o.textContent = c; grp.appendChild(o); });
+      el.appendChild(grp);
+    }
+    if (sss.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Senior Secondary School';
+      sss.forEach(c => { const o = document.createElement('option'); o.value = o.textContent = c; grp.appendChild(o); });
+      el.appendChild(grp);
+    }
+  });
+}
 
 async function loadSettings() {
   try {
@@ -288,19 +330,47 @@ async function submitAddStudent() {
 }
 
 function editStudent(id, name, cls, gender, dob) {
-  const newName   = prompt('Edit name:', name);
-  if (newName === null) return;
-  const newClass  = prompt('Edit class:', cls);
-  if (newClass === null) return;
+  document.getElementById('edit-student-id').value      = id;
+  document.getElementById('edit-student-name').value    = name;
+  document.getElementById('edit-student-gender').value  = gender || '';
+  document.getElementById('edit-student-dob').value     = dob || '';
+  document.getElementById('edit-student-msg').style.display = 'none';
 
-  fetch(`/api/admin/students/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: newName, class: newClass, gender, date_of_birth: dob })
-  }).then(r => r.json()).then(d => {
-    if (d.success) { showToast('Student updated!', 'success'); loadStudents(); }
-    else showToast(d.message, 'error');
-  });
+  // Populate class select from cached arms then set current value
+  populateAllClassDropdowns();
+  document.getElementById('edit-student-class').value = cls;
+
+  document.getElementById('modal-edit-student').classList.add('open');
+}
+
+async function submitEditStudent() {
+  const id     = document.getElementById('edit-student-id').value;
+  const name   = document.getElementById('edit-student-name').value.trim();
+  const cls    = document.getElementById('edit-student-class').value;
+  const gender = document.getElementById('edit-student-gender').value;
+  const dob    = document.getElementById('edit-student-dob').value;
+  const msgEl  = document.getElementById('edit-student-msg');
+
+  if (!name) { msgEl.className='msg-error'; msgEl.textContent='Name is required.'; msgEl.style.display='block'; return; }
+  if (!cls)  { msgEl.className='msg-error'; msgEl.textContent='Please select a class.'; msgEl.style.display='block'; return; }
+
+  try {
+    const res  = await fetch(`/api/admin/students/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, class: cls, gender, date_of_birth: dob || null })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Student updated!', 'success');
+      closeModal('modal-edit-student');
+      loadStudents();
+    } else {
+      msgEl.className = 'msg-error'; msgEl.textContent = data.message; msgEl.style.display = 'block';
+    }
+  } catch (_) {
+    msgEl.className = 'msg-error'; msgEl.textContent = 'Error updating student.'; msgEl.style.display = 'block';
+  }
 }
 
 async function deleteStudent(id, name) {
@@ -370,6 +440,9 @@ async function searchStudentResults() {
   }
 }
 
+const AFFECTIVE_TRAITS_ADMIN   = ['Alertness','Honesty','Neatness','Politeness','Punctuality','Relationship with Others','Reliability'];
+const PSYCHOMOTOR_SKILLS_ADMIN = ['Construction','Drawing & Arts','Flexibility','Games & Sports','Handwriting','Musical Skills','Paintings'];
+
 async function loadStudentResults(studentId, studentName, session, term, studentClass) {
   resultStudentId    = studentId;
   resultStudentClass = studentClass || null;
@@ -381,41 +454,109 @@ async function loadStudentResults(studentId, studentName, session, term, student
     if (session) params.set('session', session);
     if (term)    params.set('term', term);
 
-    const res  = await fetch(`/api/admin/student-results/${studentId}?${params}`);
-    const data = await res.json();
+    const [resData, ratingsData] = await Promise.all([
+      fetch(`/api/admin/student-results/${studentId}?${params}`).then(r => r.json()),
+      (session && term)
+        ? fetch(`/api/admin/student-ratings/${studentId}?session=${encodeURIComponent(session)}&term=${encodeURIComponent(term)}`).then(r => r.json())
+        : Promise.resolve({ affective: {}, psychomotor: {} })
+    ]);
+
+    const aff  = ratingsData.affective   || {};
+    const psyc = ratingsData.psychomotor || {};
+
+    function ratingSelect(type, trait, currentVal) {
+      const id = `rating-${type}-${trait.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'')}`;
+      return `<select id="${id}" class="rating-select" data-type="${type}" data-trait="${esc(trait)}">
+        <option value="0"${!currentVal?'selected':''}>—</option>
+        <option value="5"${currentVal==5?'selected':''}>5 – Excellent</option>
+        <option value="4"${currentVal==4?'selected':''}>4 – Very Good</option>
+        <option value="3"${currentVal==3?'selected':''}>3 – Good</option>
+        <option value="2"${currentVal==2?'selected':''}>2 – Fair</option>
+        <option value="1"${currentVal==1?'selected':''}>1 – Poor</option>
+      </select>`;
+    }
 
     panel.innerHTML = `
       <div class="card-header">
         <h3>Results for ${esc(studentName)}</h3>
         <button class="btn-primary btn-sm" onclick="openAddResultModalForStudent(${studentId},'${esc(studentName)}','${esc(resultStudentClass||'')}')">+ Add Result</button>
       </div>
-      ${data.results.length === 0
+      ${resData.results.length === 0
         ? `<div class="empty-placeholder"><p>No results found for this filter</p></div>`
         : `<div class="table-wrap">
             <table class="data-table">
               <thead><tr><th>Subject</th><th>Session</th><th>Term</th><th>CA1</th><th>CA2</th><th>Exam</th><th>Total</th><th>Grade</th><th>Actions</th></tr></thead>
               <tbody>
-                ${data.results.map(r => `
+                ${resData.results.map(r => `
                   <tr>
                     <td><strong>${esc(r.subject)}</strong></td>
                     <td style="font-size:0.8rem">${esc(r.session)}</td>
                     <td style="font-size:0.8rem">${esc(r.term)}</td>
-                    <td>${r.ca1}</td>
-                    <td>${r.ca2}</td>
-                    <td>${r.exam}</td>
+                    <td>${r.ca1}</td><td>${r.ca2}</td><td>${r.exam}</td>
                     <td><strong>${r.total}</strong></td>
                     <td><span class="pin-${r.grade==='F9'?'un':''}used">${r.grade}</span></td>
-                    <td>
-                      <button class="btn-danger" onclick="deleteResult(${r.id},${studentId},'${esc(studentName)}','${session}','${term}')">Del</button>
-                    </td>
-                  </tr>
-                `).join('')}
+                    <td><button class="btn-danger" onclick="deleteResult(${r.id},${studentId},'${esc(studentName)}','${session}','${term}')">Del</button></td>
+                  </tr>`).join('')}
               </tbody>
             </table>
-           </div>`
-      }`;
+          </div>`
+      }
+      ${session && term ? `
+      <!-- Ratings -->
+      <div class="ratings-admin-wrap">
+        <div class="ratings-admin-header">
+          <span>Affective Traits &amp; Psychomotor Ratings</span>
+          <button class="btn-primary btn-sm" onclick="saveRatings(${studentId},'${esc(session)}','${esc(term)}')">Save Ratings</button>
+        </div>
+        <div class="ratings-admin-grid">
+          <div class="ratings-col">
+            <div class="ratings-col-title">AFFECTIVE TRAITS</div>
+            ${AFFECTIVE_TRAITS_ADMIN.map(trait => `
+              <div class="rating-row">
+                <span class="rating-label">${esc(trait)}</span>
+                ${ratingSelect('affective', trait, aff[trait] || 0)}
+              </div>`).join('')}
+          </div>
+          <div class="ratings-col">
+            <div class="ratings-col-title">PSYCHOMOTOR</div>
+            ${PSYCHOMOTOR_SKILLS_ADMIN.map(skill => `
+              <div class="rating-row">
+                <span class="rating-label">${esc(skill)}</span>
+                ${ratingSelect('psychomotor', skill, psyc[skill] || 0)}
+              </div>`).join('')}
+          </div>
+        </div>
+        <div id="ratings-msg" style="display:none;padding:0.5rem 0.75rem;border-radius:6px;font-size:0.82rem;margin-top:0.5rem"></div>
+      </div>` : ''}`;
   } catch (e) {
     panel.innerHTML = '<div class="empty-placeholder"><p>Error loading results</p></div>';
+  }
+}
+
+async function saveRatings(studentId, session, term) {
+  const affective   = {};
+  const psychomotor = {};
+  document.querySelectorAll('.rating-select').forEach(sel => {
+    const type  = sel.dataset.type;
+    const trait = sel.dataset.trait;
+    if (type === 'affective')   affective[trait]   = parseInt(sel.value) || 0;
+    if (type === 'psychomotor') psychomotor[trait] = parseInt(sel.value) || 0;
+  });
+
+  const msgEl = document.getElementById('ratings-msg');
+  try {
+    const res  = await fetch(`/api/admin/student-ratings/${studentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session, term, affective, psychomotor })
+    });
+    const data = await res.json();
+    msgEl.className     = data.success ? 'msg-success' : 'msg-error';
+    msgEl.textContent   = data.message;
+    msgEl.style.display = 'block';
+    if (data.success) showToast('Ratings saved!', 'success');
+  } catch (_) {
+    msgEl.className = 'msg-error'; msgEl.textContent = 'Error saving ratings.'; msgEl.style.display = 'block';
   }
 }
 
@@ -984,6 +1125,254 @@ async function changePassword() {
   }
 }
 
+// ─── Tabulation Sheet ──────────────────────────────────────────────────────────
+
+let cachedTabulationData = null;
+
+function populateTabulationDropdowns() {
+  const tabSession = document.getElementById('tab-session');
+  if (tabSession && tabSession.options.length <= 1 && cachedStats) {
+    (cachedStats.sessions || []).forEach(s => {
+      const o = document.createElement('option'); o.value = s; o.textContent = s;
+      tabSession.appendChild(o);
+    });
+  }
+  if (tabSession && cachedSettings.current_session) tabSession.value = cachedSettings.current_session;
+  const tabTerm = document.getElementById('tab-term');
+  if (tabTerm && cachedSettings.current_term) tabTerm.value = cachedSettings.current_term;
+}
+
+async function loadTabulation() {
+  const cls     = document.getElementById('tab-class').value;
+  const session = document.getElementById('tab-session').value;
+  const term    = document.getElementById('tab-term').value;
+  const panel   = document.getElementById('tabulation-panel');
+
+  if (!cls || !session || !term) { showToast('Select class, session, and term first.', 'error'); return; }
+
+  panel.innerHTML = '<div class="empty-placeholder"><p>Loading tabulation...</p></div>';
+  document.getElementById('tab-export-btn').style.display = 'none';
+  document.getElementById('tab-print-btn').style.display  = 'none';
+  document.getElementById('tab-action-btns').style.display = 'none';
+
+  try {
+    const params = new URLSearchParams({ class: cls, session, term });
+    const res  = await fetch('/api/admin/class-results?' + params);
+    const data = await res.json();
+
+    if (!data.success || !data.students || data.students.length === 0) {
+      panel.innerHTML = '<div class="empty-placeholder"><p>No results found for this selection.</p></div>';
+      return;
+    }
+
+    cachedTabulationData = { students: data.students, cls, session, term };
+    renderTabulation(data.students, cls, session, term);
+
+    document.getElementById('tab-export-btn').style.display = '';
+    document.getElementById('tab-print-btn').style.display  = '';
+    document.getElementById('tab-action-btns').style.display = 'flex';
+  } catch (e) {
+    panel.innerHTML = `<div class="empty-placeholder"><p>Error: ${esc(e.message)}</p></div>`;
+  }
+}
+
+function renderTabulation(students, cls, session, term) {
+  const panel = document.getElementById('tabulation-panel');
+
+  // Collect all unique subjects in a stable order
+  const subjectSet = new Set();
+  students.forEach(s => s.results.forEach(r => subjectSet.add(r.subject)));
+  const subjects = Array.from(subjectSet).sort();
+
+  // Build a score lookup: studentId → { subject → total }
+  const scoreMap = {};
+  students.forEach(s => {
+    scoreMap[s.id] = {};
+    s.results.forEach(r => { scoreMap[s.id][r.subject] = r.total; });
+  });
+
+  // Column averages
+  const colSums   = {};
+  const colCounts = {};
+  subjects.forEach(subj => { colSums[subj] = 0; colCounts[subj] = 0; });
+  students.forEach(s => {
+    subjects.forEach(subj => {
+      const score = scoreMap[s.id][subj];
+      if (score !== undefined) { colSums[subj] += score; colCounts[subj]++; }
+    });
+  });
+
+  const settings = cachedSettings;
+  const schoolName = settings.school_name || 'SCHOOL';
+
+  panel.innerHTML = `
+    <div class="tab-sheet" id="tab-sheet">
+      <!-- Sheet header (visible on screen & print) -->
+      <div class="tab-header">
+        <div class="tab-school">${esc(schoolName)}</div>
+        <div class="tab-title">TABULATION SHEET</div>
+        <div class="tab-meta">
+          <span>Class: <strong>${esc(cls)}</strong></span>
+          <span>Session: <strong>${esc(session)}</strong></span>
+          <span>Term: <strong>${esc(term)}</strong></span>
+          <span>No. of Students: <strong>${students.length}</strong></span>
+          <span>No. of Subjects: <strong>${subjects.length}</strong></span>
+        </div>
+      </div>
+
+      <div class="tab-table-wrap">
+        <table class="tab-table" id="tab-table">
+          <thead>
+            <tr>
+              <th class="tab-sn">S/N</th>
+              <th class="tab-name">Student Name</th>
+              <th class="tab-admno">Adm. No.</th>
+              ${subjects.map(s => `<th class="tab-subj" title="${esc(s)}">${esc(subjectAbbr(s))}</th>`).join('')}
+              <th class="tab-total">Total</th>
+              <th class="tab-avg">Avg</th>
+              <th class="tab-pos">Pos</th>
+            </tr>
+            <tr class="tab-subject-full-row">
+              <th colspan="3" style="text-align:right;font-size:0.68rem;color:#94a3b8">Full subject names →</th>
+              ${subjects.map(s => `<th class="tab-subj-full">${esc(s)}</th>`).join('')}
+              <th colspan="3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${students.map((st, i) => {
+              const posClass = st.position === 1 ? 'tab-pos-1' : st.position === 2 ? 'tab-pos-2' : st.position === 3 ? 'tab-pos-3' : '';
+              return `<tr class="${posClass}">
+                <td class="tab-sn">${i + 1}</td>
+                <td class="tab-name-cell">${esc(st.name)}</td>
+                <td class="tab-admno-cell">${esc(st.admission_number)}</td>
+                ${subjects.map(subj => {
+                  const score = scoreMap[st.id][subj];
+                  if (score === undefined) return `<td class="tab-score tab-na">—</td>`;
+                  const band = score >= 80 ? 'tab-band-a' : score >= 60 ? 'tab-band-b' : score >= 40 ? 'tab-band-c' : 'tab-band-f';
+                  return `<td class="tab-score ${band}">${score}</td>`;
+                }).join('')}
+                <td class="tab-total-cell"><strong>${st.grand_total}</strong></td>
+                <td class="tab-avg-cell">${st.average}</td>
+                <td class="tab-pos-cell">
+                  <span class="tab-pos-badge tab-pos-badge-${st.position <= 3 ? st.position : 'n'}">${getOrdinalTab(st.position)}</span>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+          <tfoot>
+            <tr class="tab-col-avg-row">
+              <td colspan="3" class="tab-col-avg-label">CLASS AVERAGE</td>
+              ${subjects.map(subj => {
+                const avg = colCounts[subj] > 0 ? (colSums[subj] / colCounts[subj]).toFixed(1) : '—';
+                return `<td class="tab-score tab-col-avg">${avg}</td>`;
+              }).join('')}
+              <td class="tab-total-cell tab-col-avg">
+                ${(students.reduce((s, st) => s + st.grand_total, 0) / students.length).toFixed(1)}
+              </td>
+              <td class="tab-avg-cell tab-col-avg">
+                ${(students.reduce((s, st) => s + st.average, 0) / students.length).toFixed(1)}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="tab-footer">
+        <div class="tab-sign">
+          <div class="tab-sign-line"></div>
+          <p>Class Teacher's Signature &amp; Date</p>
+        </div>
+        <div class="tab-sign">
+          <div class="tab-sign-line"></div>
+          <p>Vice Principal's Signature &amp; Date</p>
+        </div>
+        <div class="tab-sign">
+          <div class="tab-sign-line"></div>
+          <p>Principal's Signature &amp; Date</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getOrdinalTab(n) {
+  const s = ['th','st','nd','rd'], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function printTabulation() {
+  const sheet = document.getElementById('tab-sheet');
+  if (!sheet) return;
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head>
+    <title>Tabulation Sheet</title>
+    <style>
+      @page { size: A3 landscape; margin: 10mm; }
+      * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { font-family: 'Calibri', Arial, sans-serif; font-size: 9pt; margin: 0; }
+      .tab-header { text-align: center; margin-bottom: 6pt; border-bottom: 2pt solid #006400; padding-bottom: 5pt; }
+      .tab-school { font-size: 13pt; font-weight: bold; color: #006400; text-transform: uppercase; letter-spacing: 1pt; }
+      .tab-title  { font-size: 11pt; font-weight: bold; letter-spacing: 2pt; margin: 2pt 0; }
+      .tab-meta   { font-size: 8pt; display: flex; justify-content: center; gap: 16pt; flex-wrap: wrap; margin-top: 3pt; }
+      .tab-table-wrap { overflow: visible; }
+      .tab-table  { width: 100%; border-collapse: collapse; font-size: 8pt; }
+      .tab-table th { background: #006400; color: white; padding: 3pt 4pt; border: 0.5pt solid #004d00; font-size: 7.5pt; text-align: center; }
+      .tab-table td { padding: 2.5pt 3pt; border: 0.5pt solid #bbb; text-align: center; }
+      .tab-name-cell, .tab-admno-cell { text-align: left; white-space: nowrap; }
+      .tab-name-cell { font-weight: 600; }
+      .tab-pos-1 { background: #fef9c3 !important; }
+      .tab-pos-2 { background: #f1f5f9 !important; }
+      .tab-pos-3 { background: #fef3c7 !important; }
+      .tab-col-avg-row td { background: #006400; color: white; font-weight: bold; }
+      .tab-col-avg-label { text-align: right; font-weight: bold; }
+      .tab-subject-full-row th { background: #004d00; font-size: 6pt; font-style: italic; white-space: nowrap; }
+      .tab-footer { display: flex; justify-content: space-between; margin-top: 12pt; padding-top: 6pt; border-top: 1pt solid #006400; }
+      .tab-sign { width: 30%; text-align: center; font-size: 8pt; }
+      .tab-sign-line { border-bottom: 0.8pt solid #333; margin-bottom: 3pt; height: 18pt; }
+      .tab-na { color: #bbb; }
+      .tab-band-a { color: #166534; font-weight: 700; }
+      .tab-band-b { color: #1d4ed8; font-weight: 600; }
+      .tab-band-c { color: #c2410c; }
+      .tab-band-f { color: #dc2626; }
+      .tab-pos-badge { font-weight: 700; }
+      .tab-total-cell, .tab-avg-cell { font-weight: 700; }
+    </style>
+  </head><body>${sheet.innerHTML}</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => { w.print(); }, 400);
+}
+
+function exportTabulationCsv() {
+  if (!cachedTabulationData) return;
+  const { students, cls, session, term } = cachedTabulationData;
+
+  const subjectSet = new Set();
+  students.forEach(s => s.results.forEach(r => subjectSet.add(r.subject)));
+  const subjects = Array.from(subjectSet).sort();
+
+  const headers = ['S/N', 'Student Name', 'Admission No', ...subjects, 'Total', 'Average', 'Position'];
+  const rows = students.map((st, i) => {
+    const scoreMap = {};
+    st.results.forEach(r => { scoreMap[r.subject] = r.total; });
+    return [
+      i + 1, st.name, st.admission_number,
+      ...subjects.map(subj => scoreMap[subj] !== undefined ? scoreMap[subj] : ''),
+      st.grand_total, st.average, getOrdinalTab(st.position)
+    ];
+  });
+
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `tabulation_${cls}_${session}_${term}.csv`.replace(/[\s/]/g, '_');
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Performance Analysis ──────────────────────────────────────────────────────
 
 const ANALYSIS_RANGE_LABELS = ['80 – 100', '60 – 80', '40 – 60', '0 – 40'];
@@ -999,27 +1388,17 @@ let analysisPieChart  = null;
 let cachedAnalysisData = null;
 
 function populateAnalysisDropdowns() {
-  const anClass   = document.getElementById('an-class');
+  // Classes already pre-populated by loadClassArms(); just set session/term defaults
   const anSession = document.getElementById('an-session');
-
-  // Re-use data already loaded by loadStats
-  if (anClass && anClass.options.length <= 1 && cachedStats) {
-    (cachedStats.classes || []).forEach(c => {
-      const o = document.createElement('option'); o.value = c; o.textContent = c;
-      anClass.appendChild(o);
-    });
-  }
   if (anSession && anSession.options.length <= 1 && cachedStats) {
     (cachedStats.sessions || []).forEach(s => {
       const o = document.createElement('option'); o.value = s; o.textContent = s;
       anSession.appendChild(o);
     });
   }
-
-  // Pre-select current settings
   if (anSession && cachedSettings.current_session) anSession.value = cachedSettings.current_session;
   const anTerm = document.getElementById('an-term');
-  if (anTerm && cachedSettings.current_term)   anTerm.value = cachedSettings.current_term;
+  if (anTerm && cachedSettings.current_term) anTerm.value = cachedSettings.current_term;
 }
 
 async function loadAnalysis() {

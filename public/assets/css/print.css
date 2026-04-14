@@ -142,6 +142,41 @@
 
   .slip-footer p { font-size: 7pt !important; color: rgba(255,255,255,0.7) !important; }
 
+  /* Affective traits & psychomotor */
+  .traits-section {
+    grid-template-columns: 1fr 1fr auto !important;
+    border-top: 1pt solid #006400 !important;
+    border-bottom: 1pt solid #006400 !important;
+    page-break-inside: avoid;
+  }
+
+  .traits-title {
+    font-size: 7pt !important;
+    background: #e8f5e8 !important;
+    padding: 2pt 4pt !important;
+    margin: -4pt -8pt 3pt !important;
+  }
+
+  .traits-table { font-size: 7.5pt !important; }
+
+  .traits-table th {
+    padding: 2pt 3pt !important;
+    font-size: 7pt !important;
+    background: #006400 !important;
+    color: white !important;
+    border: 0.5pt solid #004d00 !important;
+  }
+
+  .traits-table td {
+    padding: 2pt 3pt !important;
+    border: 0.5pt solid #d1e8d1 !important;
+    font-size: 7.5pt !important;
+  }
+
+  .traits-box, .traits-key {
+    padding: 4pt 8pt !important;
+  }
+
   /* Watermark visible in print */
   .watermark {
     color: rgba(0,100,0,0.05) !important;

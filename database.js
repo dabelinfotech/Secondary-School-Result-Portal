@@ -111,6 +111,19 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS student_ratings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    session TEXT NOT NULL,
+    term TEXT NOT NULL,
+    type TEXT NOT NULL,
+    trait TEXT NOT NULL,
+    rating INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES students(id),
+    UNIQUE(student_id, session, term, type, trait)
+  );
 `);
 
 // Seed default admin

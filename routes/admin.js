@@ -20,6 +20,13 @@ const upload = multer({
   }
 });
 
+const CLASS_ARMS = [
+  'JSS1A','JSS1B','JSS1C','JSS1D',
+  'JSS2A','JSS2B','JSS2C','JSS2D',
+  'JSS3A','JSS3B','JSS3C','JSS3D',
+  'SSS1A','SSS1B','SSS1C','SSS1D',
+];
+
 const SSS_SUBJECTS = [
   'Mathematics', 'English Language', 'Biology', 'Chemistry', 'Physics',
   'Further Mathematics', 'Financial Accounting', 'Commerce', 'Economics',
@@ -404,6 +411,78 @@ router.put('/settings', requireAuth, (req, res) => {
   });
   save(req.body);
   res.json({ success: true, message: 'Settings saved.' });
+});
+
+// ─── Affective & Psychomotor Ratings ─────────────────────────────────────────
+const AFFECTIVE_TRAITS = [
+  'Alertness', 'Honesty', 'Neatness', 'Politeness',
+  'Punctuality', 'Relationship with Others', 'Reliability'
+];
+
+const PSYCHOMOTOR_SKILLS = [
+  'Construction', 'Drawing & Arts', 'Flexibility',
+  'Games & Sports', 'Handwriting', 'Musical Skills', 'Paintings'
+];
+
+router.get('/student-ratings/:studentId', requireAuth, (req, res) => {
+  const { session, term } = req.query;
+  if (!session || !term) {
+    return res.status(400).json({ success: false, message: 'Session and term are required.' });
+  }
+
+  const rows = db.prepare(
+    'SELECT type, trait, rating FROM student_ratings WHERE student_id = ? AND session = ? AND term = ?'
+  ).all(req.params.studentId, session, term);
+
+  const affective    = {};
+  const psychomotor  = {};
+  rows.forEach(r => {
+    if (r.type === 'affective')   affective[r.trait]   = r.rating;
+    if (r.type === 'psychomotor') psychomotor[r.trait] = r.rating;
+  });
+
+  res.json({ success: true, affective, psychomotor });
+});
+
+router.put('/student-ratings/:studentId', requireAuth, (req, res) => {
+  const { session, term, affective = {}, psychomotor = {} } = req.body;
+  if (!session || !term) {
+    return res.status(400).json({ success: false, message: 'Session and term are required.' });
+  }
+
+  const student = db.prepare('SELECT id FROM students WHERE id = ?').get(req.params.studentId);
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Student not found.' });
+  }
+
+  const upsert = db.prepare(`
+    INSERT INTO student_ratings (student_id, session, term, type, trait, rating)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(student_id, session, term, type, trait)
+    DO UPDATE SET rating = excluded.rating
+  `);
+
+  try {
+    const saveAll = db.transaction(() => {
+      AFFECTIVE_TRAITS.forEach(trait => {
+        const rating = parseInt(affective[trait]) || 0;
+        upsert.run(req.params.studentId, session, term, 'affective', trait, rating);
+      });
+      PSYCHOMOTOR_SKILLS.forEach(trait => {
+        const rating = parseInt(psychomotor[trait]) || 0;
+        upsert.run(req.params.studentId, session, term, 'psychomotor', trait, rating);
+      });
+    });
+    saveAll();
+    res.json({ success: true, message: 'Ratings saved.' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error saving ratings: ' + e.message });
+  }
+});
+
+// ─── Class Arms ───────────────────────────────────────────────────────────────
+router.get('/classes', requireAuth, (req, res) => {
+  res.json({ success: true, classes: CLASS_ARMS });
 });
 
 // ─── Subjects List ────────────────────────────────────────────────────────────

@@ -119,7 +119,7 @@ function getAverageRemark(avg) {
 }
 
 function renderResult(data) {
-  const { student, results, summary, settings } = data;
+  const { student, results, summary, settings, ratings = {} } = data;
 
   document.getElementById('checker-section').style.display = 'none';
   document.getElementById('result-section').style.display  = 'block';
@@ -130,7 +130,7 @@ function renderResult(data) {
   slip.className = 'result-slip';
   slip.id = 'result-slip';
 
-  slip.innerHTML = buildSlipHTML(student, results, summary, settings);
+  slip.innerHTML = buildSlipHTML(student, results, summary, settings, ratings);
   container.innerHTML = '';
   container.appendChild(slip);
 
@@ -138,7 +138,18 @@ function renderResult(data) {
   document.title = `Result Slip — ${student.name} — ${student.session}`;
 }
 
-function buildSlipHTML(student, results, summary, settings) {
+const AFFECTIVE_TRAITS   = ['Alertness','Honesty','Neatness','Politeness','Punctuality','Relationship with Others','Reliability'];
+const PSYCHOMOTOR_SKILLS = ['Construction','Drawing & Arts','Flexibility','Games & Sports','Handwriting','Musical Skills','Paintings'];
+const RATING_LABELS      = { 5:'Excellent', 4:'Very Good', 3:'Good', 2:'Fair', 1:'Poor', 0:'' };
+
+function ratingDots(value) {
+  const n = parseInt(value) || 0;
+  return `<span class="rating-dots">${[5,4,3,2,1].map(v =>
+    `<span class="rating-dot${n === v ? ' active r-'+v : ''}"></span>`
+  ).join('')}</span>`;
+}
+
+function buildSlipHTML(student, results, summary, settings, ratings = {}) {
   const sn = settings.school_name    || 'EXCELLENCE SECONDARY SCHOOL';
   const sa = settings.school_address || '';
   const sp = settings.school_phone   || '';
@@ -235,6 +246,18 @@ function buildSlipHTML(student, results, summary, settings) {
         <tbody>
           ${tableRows}
         </tbody>
+        <tfoot>
+          <tr class="tfoot-total">
+            <td colspan="5" class="td-total-label">TOTAL SCORE</td>
+            <td class="td-center td-total">${summary.grand_total}</td>
+            <td colspan="2"></td>
+          </tr>
+          <tr class="tfoot-average">
+            <td colspan="5" class="td-total-label">AVERAGE SCORE</td>
+            <td class="td-center td-total">${summary.average}%</td>
+            <td colspan="2" class="td-remark" style="font-style:italic">${averageRemark}</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
 
@@ -272,6 +295,63 @@ function buildSlipHTML(student, results, summary, settings) {
       <span class="gk-item grade-pass">D7: 45–49 Pass</span>
       <span class="gk-item grade-pass">E8: 40–44 Pass</span>
       <span class="gk-item grade-fail">F9: 0–39 Fail</span>
+    </div>
+
+    <!-- Affective Traits & Psychomotor -->
+    <div class="traits-section">
+      <!-- Affective Traits -->
+      <div class="traits-box">
+        <div class="traits-title">AFFECTIVE TRAITS</div>
+        <table class="traits-table">
+          <thead>
+            <tr><th>Trait</th><th>Rating</th><th>Remark</th></tr>
+          </thead>
+          <tbody>
+            ${AFFECTIVE_TRAITS.map(trait => {
+              const val = parseInt((ratings.affective || {})[trait]) || 0;
+              return `<tr>
+                <td class="trait-name">${escHtml(trait)}</td>
+                <td class="trait-rating">${val > 0 ? val : '—'}</td>
+                <td class="trait-remark">${RATING_LABELS[val] || ''}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Psychomotor -->
+      <div class="traits-box">
+        <div class="traits-title">PSYCHOMOTOR</div>
+        <table class="traits-table">
+          <thead>
+            <tr><th>Skill</th><th>Rating</th><th>Remark</th></tr>
+          </thead>
+          <tbody>
+            ${PSYCHOMOTOR_SKILLS.map(skill => {
+              const val = parseInt((ratings.psychomotor || {})[skill]) || 0;
+              return `<tr>
+                <td class="trait-name">${escHtml(skill)}</td>
+                <td class="trait-rating">${val > 0 ? val : '—'}</td>
+                <td class="trait-remark">${RATING_LABELS[val] || ''}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Rating Key -->
+      <div class="traits-key">
+        <div class="traits-title">KEY</div>
+        <table class="traits-table">
+          <tbody>
+            <tr><td class="trait-rating">5</td><td class="trait-remark">Excellent</td></tr>
+            <tr><td class="trait-rating">4</td><td class="trait-remark">Very Good</td></tr>
+            <tr><td class="trait-rating">3</td><td class="trait-remark">Good</td></tr>
+            <tr><td class="trait-rating">2</td><td class="trait-remark">Fair</td></tr>
+            <tr><td class="trait-rating">1</td><td class="trait-remark">Poor</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Remarks & Signatures -->
