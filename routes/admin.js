@@ -76,11 +76,14 @@ router.get('/me', requireAuth, (req, res) => {
   const admin = db.prepare('SELECT id, username, full_name, role FROM admins WHERE id = ?').get(req.session.adminId);
   if (!admin) return res.status(401).json({ success: false });
   let assignedSubjects = [];
+  let assignedClasses = [];
   if (admin.role === 'staff') {
     assignedSubjects = db.prepare('SELECT subject FROM subject_assignments WHERE admin_id = ?')
       .all(req.session.adminId).map(r => r.subject);
+    assignedClasses = db.prepare('SELECT class FROM class_assignments WHERE admin_id = ?')
+      .all(req.session.adminId).map(r => r.class);
   }
-  res.json({ success: true, admin: { ...admin, assignedSubjects } });
+  res.json({ success: true, admin: { ...admin, assignedSubjects, assignedClasses } });
 });
 
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
@@ -179,13 +182,20 @@ router.post('/results', requireAuth, (req, res) => {
     return res.status(400).json({ success: false, message: 'Student, subject, session, and term are required.' });
   }
 
-  // Staff can only upload results for their assigned subjects
+  // Staff permission: check subject and class restrictions
   if (req.session.adminRole === 'staff') {
-    const assigned = db.prepare(
-      'SELECT id FROM subject_assignments WHERE admin_id = ? AND subject = ?'
-    ).get(req.session.adminId, subject);
-    if (!assigned) {
+    const staffSubjects = db.prepare('SELECT subject FROM subject_assignments WHERE admin_id = ?')
+      .all(req.session.adminId).map(r => r.subject);
+    const staffClasses = db.prepare('SELECT class FROM class_assignments WHERE admin_id = ?')
+      .all(req.session.adminId).map(r => r.class);
+    if (!staffSubjects.length && !staffClasses.length) {
+      return res.status(403).json({ success: false, message: 'You have no upload permissions assigned.' });
+    }
+    if (staffSubjects.length && !staffSubjects.includes(subject)) {
       return res.status(403).json({ success: false, message: 'You are not assigned to upload results for this subject.' });
+    }
+    if (staffClasses.length && !staffClasses.includes(cls)) {
+      return res.status(403).json({ success: false, message: 'You are not assigned to upload results for this class.' });
     }
   }
 
@@ -265,6 +275,7 @@ router.post('/upload-results', requireAuth, upload.single('file'), async (req, r
 
     let processed = 0, skipped = 0;
     const errors = [];
+    let staffSubjects = null, staffClasses = null;
 
     const upsertResult = db.prepare(`
       INSERT INTO results (student_id, subject, ca1, ca2, exam, total, grade, remark, session, term, class)
@@ -291,6 +302,16 @@ router.post('/upload-results', requireAuth, upload.single('file'), async (req, r
         if (!session) { errors.push(`Row ${rowNum}: Missing session.`); skipped++; continue; }
         if (!term) { errors.push(`Row ${rowNum}: Missing term.`); skipped++; continue; }
 
+        // Staff permission check per row
+        if (staffSubjects !== null) {
+          if (staffSubjects.length && !staffSubjects.includes(subject)) {
+            errors.push(`Row ${rowNum}: Not authorized for subject: ${subject}`); skipped++; continue;
+          }
+          if (staffClasses && staffClasses.length && cls && !staffClasses.includes(cls)) {
+            errors.push(`Row ${rowNum}: Not authorized for class: ${cls}`); skipped++; continue;
+          }
+        }
+
         // Find or create student
         let student = db.prepare('SELECT * FROM students WHERE admission_number = ?').get(admissionNo);
         if (!student) {
@@ -310,6 +331,17 @@ router.post('/upload-results', requireAuth, upload.single('file'), async (req, r
         processed++;
       }
     });
+
+    if (req.session.adminRole === 'staff') {
+      staffSubjects = db.prepare('SELECT subject FROM subject_assignments WHERE admin_id = ?')
+        .all(req.session.adminId).map(r => r.subject);
+      staffClasses = db.prepare('SELECT class FROM class_assignments WHERE admin_id = ?')
+        .all(req.session.adminId).map(r => r.class);
+      if (!staffSubjects.length && !staffClasses.length) {
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(403).json({ success: false, message: 'You have no upload permissions assigned.' });
+      }
+    }
 
     processRows(data);
 
@@ -543,19 +575,48 @@ router.put('/staff-assignments/:adminId', requireAuth, (req, res) => {
   }
 });
 
+// ─── Staff Class Assignments ──────────────────────────────────────────────────
+router.get('/class-assignments/:adminId', requireAuth, (req, res) => {
+  const classes = db.prepare('SELECT class FROM class_assignments WHERE admin_id = ?')
+    .all(req.params.adminId).map(r => r.class);
+  res.json({ success: true, classes });
+});
+
+router.put('/class-assignments/:adminId', requireAuth, (req, res) => {
+  if (req.session.adminRole !== 'superadmin' && req.session.adminRole !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Insufficient permissions.' });
+  }
+  const { classes } = req.body;
+  const adminId = parseInt(req.params.adminId);
+  const admin = db.prepare('SELECT id FROM admins WHERE id = ?').get(adminId);
+  if (!admin) return res.status(404).json({ success: false, message: 'Staff member not found.' });
+  try {
+    db.transaction(() => {
+      db.prepare('DELETE FROM class_assignments WHERE admin_id = ?').run(adminId);
+      if (Array.isArray(classes) && classes.length) {
+        const ins = db.prepare('INSERT OR IGNORE INTO class_assignments (admin_id, class) VALUES (?, ?)');
+        classes.forEach(c => ins.run(adminId, c));
+      }
+    })();
+    res.json({ success: true, message: 'Class assignments updated.' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error updating class assignments: ' + e.message });
+  }
+});
+
 // ─── Admin Management ─────────────────────────────────────────────────────────
 router.get('/admins', requireAuth, (req, res) => {
   if (req.session.adminRole !== 'superadmin') {
     return res.status(403).json({ success: false, message: 'Insufficient permissions.' });
   }
   const admins = db.prepare('SELECT id, username, full_name, role, created_at FROM admins').all();
-  // Attach assigned subjects for staff members
   admins.forEach(a => {
     if (a.role === 'staff') {
-      a.assignedSubjects = db.prepare('SELECT subject FROM subject_assignments WHERE admin_id = ?')
-        .all(a.id).map(r => r.subject);
+      a.assignedSubjects = db.prepare('SELECT subject FROM subject_assignments WHERE admin_id = ?').all(a.id).map(r => r.subject);
+      a.assignedClasses  = db.prepare('SELECT class FROM class_assignments WHERE admin_id = ?').all(a.id).map(r => r.class);
     } else {
       a.assignedSubjects = [];
+      a.assignedClasses  = [];
     }
   });
   res.json({ success: true, admins });
